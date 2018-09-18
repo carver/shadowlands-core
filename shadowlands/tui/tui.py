@@ -20,6 +20,14 @@ class Interface():
         self._price_poller = price_poller
         self._credstick = None
         self._loading_scene = True
+        # This is used to switch screens when we find or 
+        # lose access to our credstick
+        self.credstick_situation_changed = False
+        self.scenes = [
+            LoadingScene(self._screen, "LoadingScene", self),
+            MainScene(self._screen, "Main", self)
+        ]
+
 
     @property
     def credstick(self):

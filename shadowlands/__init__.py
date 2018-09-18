@@ -26,8 +26,10 @@ eth_node = Node(sl_config)
 # Eth node heartbeat
 
 eth_node.connect_config_default()
-
 eth_node.start_heartbeat_thread()
+
+# Credstick thread started in 
+# tui/effects/credstick_watcher.py
 
 # price import thread
 price_poller = PricePoller(sl_config)

@@ -31,6 +31,11 @@ class CloseCredstickError(Exception):
 class SignTxError(Exception):
     pass
 
+class StillHaveCredstick(Exception):
+    pass
+
+#import pdb; pdb.set_trace()
+
 class Credstick(object):
     interface = None
     eth_node = None
@@ -48,14 +53,9 @@ class Credstick(object):
     def heartbeat(cls):
         return
 
-    # For implementation of Trezor:
-    # satoshi labs vendor id: '0x534c'
-    # usage pages '0xf1d0', '0xff00'
     @classmethod
     def detect(cls):
         for hidDevice in hid.enumerate(0, 0):
-            #import pdb; pdb.set_trace()
-            #import pdb; pdb.set_trace()
             if hidDevice['vendor_id'] == 0x2c97:
                 if ('interface_number' in hidDevice and hidDevice['interface_number'] == 0) or ('usage_page' in hidDevice and hidDevice['usage_page'] == 0xffa0):
                     if hidDevice['path'] is not None:
@@ -95,11 +95,24 @@ class Credstick(object):
 
     @classmethod
     def credstick_finder(cls):
-        not_found = True
 
-        while not_found:
+        while not cls.detect_thread_shutdown:
             try: 
                 credstick = cls.detect()
+
+                if credstick == credstick.interface._credstick:
+                    # We still have our credstick.
+                    # Go to sleep for a bit.
+                    raise StillHaveCredstick
+
+                # We found a new credstick.  Let's wipe all
+                # possible associations with an old one.
+                credstick.interface._credstick = None
+                credstick.eth_node._credstick = None
+                credstick.address = None
+                credstick.manufacturer = None
+                credstick.product = None
+                   
                 credstick.open()
                 credstick.derive()
 
@@ -115,12 +128,27 @@ class Credstick(object):
 
                 cls.eth_node.credstick = credstick
                 cls.interface.credstick = credstick
-                not_found = False
-            except(NoCredstickFoundError, OpenCredstickError, DeriveCredstickAddressError):
-                time.sleep(0.25)
+                cls.interface.credstick_situation_changed = True
+            except NoCredstickFoundError:
+                # did we have one a moment ago?
+                if cls.interface._credstick is None:
+                    time.sleep(0.25)
+                    continue
 
-            if cls.detect_thread_shutdown:
-                break
+                # We lost our credstick!
+                # wipe everything off the previous one.
+                old_credstick = cls.interface._credstick 
+                old_credstick.interface._credstick = None
+                old_credstick.eth_node._credstick = None
+                old_credstick.address = None
+                old_credstick.manufacturer = None
+                old_credstick.product = None
+ 
+                cls.interface._credstick = None
+                cls.eth_node._credstick = None
+                cls.interface.credstick_situation_changed = True
+            except(OpenCredstickError, DeriveCredstickAddressError, StillHaveCredstick):
+                time.sleep(0.25)
 
     @classmethod
     def prepare_tx(cls, transaction_dict):
